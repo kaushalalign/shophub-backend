@@ -21,7 +21,7 @@ public class AdminController {
     @Autowired private OrderRepository orderRepository;
     @Autowired private ProductRepository productRepository;
     @Autowired private UserInfoRepository userRepository;
-    @Autowired private FeatureRepository featureRepository; // Assuming you create this simple repo
+    @Autowired private FeatureRepository featureRepository; 
 
     // ADMIN: Dashboard Stats
     @GetMapping("/dashboard")

@@ -71,27 +71,42 @@ public class OrderController {
         if (request.isFromCart()) {
             Cart cart = cartRepository.findByUserId(user.getId())
                     .orElseThrow(() -> new RuntimeException("Cart is empty"));
-
             if (cart.getItems().isEmpty()) {
                 throw new RuntimeException("Cart is empty");
             }
-
+    
             for (CartItem cartItem : cart.getItems()) {
-                OrderItem orderItem = createOrderItem(order, cartItem.getProduct(), cartItem.getQuantity());
+                Product p = cartItem.getProduct();
+                
+                // Stock Check & Update
+                if (cartItem.getQuantity() > p.getTotalStock()) {
+                    throw new RuntimeException("Product " + p.getTitle() + " is out of stock or requested quantity unavailable.");
+                }
+                p.setTotalStock(p.getTotalStock() - cartItem.getQuantity()); // Decrease Stock
+                productRepository.save(p);
+    
+                OrderItem orderItem = createOrderItem(order, p, cartItem.getQuantity());
                 orderItems.add(orderItem);
                 total = total.add(orderItem.getPriceAtPurchase().multiply(BigDecimal.valueOf(orderItem.getQuantity())));
             }
             cartItemRepository.deleteByCartId(cart.getId());
-
         } else {
+            // Buy Now Logic
             if (request.getItems() == null || request.getItems().isEmpty()) {
                 throw new RuntimeException("No items provided");
             }
-
+    
             for (var itemReq : request.getItems()) {
                 Product p = productRepository.findById(itemReq.getProductId())
                         .orElseThrow(() -> new RuntimeException("Product not found"));
-
+                
+                // Stock Check & Update
+                if (itemReq.getQuantity() > p.getTotalStock()) {
+                     throw new RuntimeException("Product " + p.getTitle() + " is out of stock.");
+                }
+                p.setTotalStock(p.getTotalStock() - itemReq.getQuantity()); // Decrease Stock
+                productRepository.save(p);
+    
                 OrderItem orderItem = createOrderItem(order, p, itemReq.getQuantity());
                 orderItems.add(orderItem);
                 total = total.add(orderItem.getPriceAtPurchase().multiply(BigDecimal.valueOf(orderItem.getQuantity())));

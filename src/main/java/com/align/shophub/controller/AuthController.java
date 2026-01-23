@@ -34,17 +34,7 @@ public class AuthController {
         return service.addUser(signinRequest);
     }
 
-//    @GetMapping("/all")
-//    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-//    public List<Product> getAllTheProducts() {
-//        return service.getProducts();
-//    }
-//
-//    @GetMapping("/{id}")
-//    @PreAuthorize("hasAuthority('ROLE_USER')")
-//    public Product getProductById(@PathVariable int id) {
-//        return service.getProduct(id);
-//    }
+
 
 
     @PostMapping("/authenticate")

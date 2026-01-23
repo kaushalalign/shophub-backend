@@ -61,14 +61,25 @@ public class CartController {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        // Check if product exists in cart
+        // Check Stock
+        if (request.getQuantity() > product.getTotalStock()) {
+             throw new RuntimeException("Insufficient stock. Only " + product.getTotalStock() + " available.");
+        }
+
         Optional<CartItem> existingItem = cart.getItems().stream()
                 .filter(item -> item.getProduct().getId().equals(product.getId()))
                 .findFirst();
 
         if (existingItem.isPresent()) {
             CartItem item = existingItem.get();
-            item.setQuantity(item.getQuantity() + request.getQuantity());
+            int newQuantity = item.getQuantity() + request.getQuantity();
+            
+            // Check stock for total quantity
+            if (newQuantity > product.getTotalStock()) {
+                throw new RuntimeException("Cannot add more. Max stock is " + product.getTotalStock());
+            }
+            
+            item.setQuantity(newQuantity);
             cartItemRepository.save(item);
         } else {
             CartItem newItem = new CartItem();
@@ -78,33 +89,39 @@ public class CartController {
             cart.getItems().add(newItem);
             cartItemRepository.save(newItem);
         }
-
-        // Refresh cart from DB to ensure calculations are correct
+        
+        // Refresh to get latest state
         return mapToCartResponse(cartRepository.findById(cart.getId()).get());
     }
-
-    // 3. Update Item Quantity
-    @PutMapping("/item/{itemId}")
-    public CartResponse updateQuantity(@RequestHeader("Authorization") String token,
-                                       @PathVariable Long itemId,
-                                       @RequestBody CartRequest request) {
-        Cart cart = getOrCreateCart(token);
-        CartItem item = cartItemRepository.findById(itemId)
-                .orElseThrow(() -> new RuntimeException("Item not found"));
-
-        if (!item.getCart().getId().equals(cart.getId())) {
-            throw new RuntimeException("You cannot modify this cart item");
-        }
-
-        if (request.getQuantity() <= 0) {
-            cartItemRepository.delete(item);
-        } else {
-            item.setQuantity(request.getQuantity());
-            cartItemRepository.save(item);
-        }
-
-        return mapToCartResponse(cartRepository.findById(cart.getId()).get());
+// 3. Update Item Quantity
+@PutMapping("/item/{itemId}")
+public CartResponse updateQuantity(@RequestHeader("Authorization") String token,
+                                   @PathVariable Long itemId,
+                                   @RequestBody CartRequest request) {
+    Cart cart = getOrCreateCart(token);
+    CartItem item = cartItemRepository.findById(itemId)
+            .orElseThrow(() -> new RuntimeException("Item not found"));
+    
+    if (!item.getCart().getId().equals(cart.getId())) {
+        throw new RuntimeException("Access Denied");
     }
+
+    Product product = item.getProduct();
+
+    if (request.getQuantity() <= 0) {
+        cart.getItems().remove(item); // Update in-memory list before return
+        cartItemRepository.delete(item);
+    } else {
+        // Check Stock
+        if (request.getQuantity() > product.getTotalStock()) {
+            throw new RuntimeException("Cannot increase quantity. Max available: " + product.getTotalStock());
+        }
+        item.setQuantity(request.getQuantity());
+        cartItemRepository.save(item);
+    }
+
+    return mapToCartResponse(cartRepository.findById(cart.getId()).get());
+}
 
     // 4. Remove Item
     @DeleteMapping("/item/{itemId}")
@@ -142,6 +159,7 @@ public class CartController {
                             .price(price)
                             .quantity(item.getQuantity())
                             .subTotal(price.multiply(BigDecimal.valueOf(item.getQuantity())))
+                            .availableStock(item.getProduct().getTotalStock()) // Map Stock
                             .build();
                 }).collect(Collectors.toList()))
                 .build();
